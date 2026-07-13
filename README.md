@@ -1,14 +1,16 @@
-# Python Scripts
+# PythonApps
 
-A collection of standalone Python tools and utilities. Each script lives in its own folder with its own README, usage examples, and dependencies.
+A collection of standalone Python tools ("mini apps") — each solves one specific goal and lives in its own folder with its own README, usage examples, and dependencies.
 
-## Scripts
+## Projects
 
-| Script | What it does |
+| Project | What it does |
 |--------|--------------|
 | [options-flow](./options-flow) | Free-data options-flow / "whale positioning" scanner — reads call/put dollar flow, fresh volume-vs-open-interest positioning, IV skew, and multi-day OI buildup for any ticker. |
 
 _More tools will be added over time._
+
+*Windows shell-script equivalents live in the [ShellScriptApps](https://github.com/Hamzah-Muhammad/ShellScriptApps) repo.*
 
 ## Getting started
 
@@ -16,8 +18,8 @@ Each tool is self-contained. To run one, open its folder and follow its README. 
 
 ```bash
 # clone the repo
-git clone https://github.com/Hamzah-Muhammad/PythonScripts.git
-cd PythonScripts
+git clone https://github.com/Hamzah-Muhammad/PythonApps.git
+cd PythonApps
 
 # (recommended) create a virtual environment
 python -m venv .venv
