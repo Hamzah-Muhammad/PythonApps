@@ -22,32 +22,32 @@ pip install yfinance pandas
 ## Usage
 
 ```bash
-# single ticker
-python flow.py MU
+# one ticker = one complete report, no flags needed
+python flow.py MRVL
 
-# multiple tickers with options
-python flow.py MU NVDA SNDK --expiries 4 --min-premium 250000
+# multiple tickers -> each gets its own full individual report
+python flow.py MU NVDA SNDK --min-premium 250000
 
 # plain console output instead of Markdown
 python flow.py AAPL --format text
-
-# cross-ticker comparison chart (call-share bars, premium magnitude, quick stats)
-python flow.py ARM MRVL --compare        # appended after the per-ticker reports
-python flow.py ARM MRVL --compare-only   # just the chart — fastest side-by-side read
 ```
+
+Every report includes, per ticker: net flow verdict, **flow by expiry**
+(every expiry date pulled — weeklies ≤45 DTE plus monthlies out ~18 months —
+with exact call $ and put $ per date, net ratio and top print), fresh
+positioning (Vol > OI), largest $ prints, IV skew, and OI buildup vs the
+prior snapshot.
 
 ### Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `tickers` | — | One or more ticker symbols (positional). |
-| `--expiries` | `3` | How many nearest expirations to include. |
+| `--expiries` | `14` | Max expiry dates to pull (weeklies ≤45 DTE + monthlies out ~18 months). |
 | `--min-premium` | `250000` | Minimum $ premium to list a contract in "Largest $ Prints". |
 | `--min-voloi` | `2.0` | Minimum Volume/Open-Interest ratio for "Fresh Positioning". |
 | `--min-vol` | `300` | Minimum contract volume for "Fresh Positioning". |
 | `--format` | `md` | `md` for Markdown, `text` for console. |
-| `--compare` | off | Append a cross-ticker flow-comparison chart (needs 2+ tickers). |
-| `--compare-only` | off | Print only the comparison chart, skip full per-ticker reports. |
 
 ## How to read it
 

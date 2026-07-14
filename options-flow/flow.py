@@ -17,10 +17,12 @@ Noise filters applied:
   * deep-ITM, near-0% IV contracts excluded from directional reads (arb/assignment, not bets)
 
 Usage:
-    python flow.py MU
-    python flow.py MU NVDA SNDK --expiries 4 --min-premium 250000
-    python flow.py ARM MRVL --compare          # adds cross-ticker comparison chart
-    python flow.py ARM MRVL --compare-only     # comparison chart only, skip full reports
+    python flow.py MRVL
+    python flow.py MU NVDA SNDK --min-premium 250000
+
+Every ticker gets its own complete report, no flags needed: net flow verdict,
+per-expiry $ flow (exact dates, exact call/put dollars, weeklies + monthlies
+out ~18 months), fresh positioning, largest prints, OI buildup.
 """
 import argparse
 import os
@@ -50,14 +52,29 @@ def money(x):
     return f"${x:,.0f}"
 
 
-def load_chain(tk: yf.Ticker, expiries: int, spot: float):
-    """Combined calls+puts across nearest N expiries, skipping today's 0DTE expiry."""
-    exps = tk.options
-    if not exps:
+def dte(expiry: str) -> int:
+    """Days to expiry from today."""
+    try:
+        return (date.fromisoformat(expiry) - date.today()).days
+    except ValueError:
+        return -1
+
+
+def pick_all_expiries(exps, cap=14, max_days=550):
+    """The full picture in one pass: every weekly ≤45 DTE plus monthlies
+    (3rd-Friday-ish) out to ~18 months — capped so we don't hammer Yahoo."""
+    valid = [e for e in exps if 0 < dte(e) <= max_days]
+    use = [e for e in valid
+           if dte(e) <= 45 or 15 <= date.fromisoformat(e).day <= 21]
+    if not use:
+        use = valid[:3]
+    return sorted(use)[:cap]
+
+
+def load_chain(tk: yf.Ticker, use: list, spot: float):
+    """Combined calls+puts across the given expiries."""
+    if not use:
         return None, []
-    today = date.today().isoformat()
-    exps = [e for e in exps if e != today]          # skip 0DTE (OI is zeroed)
-    use = exps[:expiries]
     frames = []
     for e in use:
         try:
@@ -84,6 +101,7 @@ def load_chain(tk: yf.Ticker, expiries: int, spot: float):
     )
     out["premium"] = out["volume"] * out["lastPrice"] * 100.0
     out["iv"] = out["impliedVolatility"]
+    out["dte"] = out["expiry"].apply(dte)
 
     # moneyness: how far OTM(+) / ITM(-) as a fraction of spot, signed by side
     def itm_frac(r):
@@ -151,7 +169,7 @@ def flow_bar(call_share, width=20):
     return "🟩" * fill + "🟥" * (width - fill)
 
 
-def build_report(ticker, expiries, min_premium, min_voloi, min_vol):
+def build_report(ticker, max_expiries, min_premium, min_voloi, min_vol):
     """Run analysis and return a structured dict (no printing)."""
     tk = yf.Ticker(ticker)
     try:
@@ -159,13 +177,34 @@ def build_report(ticker, expiries, min_premium, min_voloi, min_vol):
     except Exception:
         spot = 0.0
 
-    df, used = load_chain(tk, expiries, spot)
+    exps_all = tk.options or ()
+    use = pick_all_expiries(exps_all, cap=max_expiries)
+    df, used = load_chain(tk, use, spot)
     R = {"ticker": ticker, "spot": spot, "expiries": used, "ok": df is not None and not df.empty,
          "thresholds": {"premium": min_premium, "voloi": min_voloi, "vol": min_vol}}
     if not R["ok"]:
         return R
 
     dirf = df[df["directional"]]
+
+    # exact $ flow per expiry date
+    rows = []
+    for e in used:
+        sub = dirf[dirf["expiry"] == e]
+        if sub.empty:
+            continue
+        c = sub[sub["side"] == "C"]["premium"].sum()
+        p = sub[sub["side"] == "P"]["premium"].sum()
+        label, ratio = verdict(c, p)
+        top = None
+        if sub["premium"].max() > 0:
+            t = sub.loc[sub["premium"].idxmax()]
+            top = {"side": t["side"], "strike": t["strike"], "prem": t["premium"]}
+        rows.append({"expiry": e, "dte": dte(e), "cprem": c, "pprem": p,
+                     "ratio": ratio, "label": label,
+                     "emoji": VERDICT_EMOJI.get(label, "⚪"),
+                     "share": c / (c + p) if (c + p) else 0.5, "top": top})
+    R["by_expiry"] = rows
     calls, puts = dirf[dirf["side"] == "C"], dirf[dirf["side"] == "P"]
     cvol, pvol = calls["volume"].sum(), puts["volume"].sum()
     cprem, pprem = calls["premium"].sum(), puts["premium"].sum()
@@ -187,12 +226,15 @@ def build_report(ticker, expiries, min_premium, min_voloi, min_vol):
     R["big"] = big.to_dict("records")
 
     if spot > 0:
-        df["dist"] = (df["strike"] - spot).abs()
-        oc = calls[calls["strike"] > spot]["iv"]
-        op = puts[puts["strike"] < spot]["iv"]
+        # IV read on nearest 3 expiries only (LEAP IV would dilute the ATM number)
+        dfn = df[df["expiry"].isin(used[:3])].copy()
+        dfn["dist"] = (dfn["strike"] - spot).abs()
+        ncalls, nputs = dfn[dfn["side"] == "C"], dfn[dfn["side"] == "P"]
+        oc = ncalls[ncalls["strike"] > spot]["iv"]
+        op = nputs[nputs["strike"] < spot]["iv"]
         cic = oc.mean() * 100 if not oc.empty else 0
         cip = op.mean() * 100 if not op.empty else 0
-        R["iv"] = {"atm": df.nsmallest(6, "dist")["iv"].mean() * 100, "otm_call": cic, "otm_put": cip,
+        R["iv"] = {"atm": dfn.nsmallest(6, "dist")["iv"].mean() * 100, "otm_call": cic, "otm_put": cip,
                    "skew": "put skew (downside hedging)" if cip > cic + 2
                    else "call skew (upside chase)" if cic > cip + 2 else "balanced"}
 
@@ -216,9 +258,10 @@ def render_md(R):
     L = []
     if not R["ok"]:
         return f"### ⚠️ {R['ticker']} — no options data available\n"
-    exps = ", ".join(R["expiries"]) if R["expiries"] else "none"
+    e = R["expiries"]
+    exps = f"{e[0]} → {e[-1]} ({len(e)} dates)" if e else "none"
     L.append(f"## 📊 {R['ticker']} — Options Flow Scan")
-    L.append(f"**Spot ~${R['spot']:,.2f}** · expiries: {exps} · _0DTE skipped · free data (~15m delayed)_\n")
+    L.append(f"**Spot ~${R['spot']:,.2f}** · expiries {exps} · _0DTE skipped · free data (~15m delayed)_\n")
 
     share = R["call_share"]
     rtxt = f" ({R['ratio']:.1f}× call $ / put $)" if 0 < R["ratio"] < 90 else ""
@@ -234,6 +277,10 @@ def render_md(R):
     if "iv" in R:
         iv = R["iv"]
         L.append(f"| IV (ATM / OTM call / OTM put) | {iv['atm']:.0f}% / {iv['otm_call']:.0f}% / {iv['otm_put']:.0f}% → {iv['skew']} |")
+    L.append("")
+
+    L.append("### 📅 Flow by Expiry — exact dates, exact dollars")
+    L.append(expiry_flow_table(R))
     L.append("")
 
     L.append("### 🔥 Fresh Positioning — Volume > Open Interest")
@@ -278,49 +325,24 @@ def money_short(x):
     return f"${x/1e6:.2f}M" if x >= 1e6 else f"${x/1e3:.0f}K"
 
 
-def hbar(value, vmax, width=24, char="█"):
-    """Horizontal bar scaled to vmax."""
-    if vmax <= 0:
-        return ""
-    return char * max(1, round(value / vmax * width)) if value > 0 else ""
-
-
-def render_compare(reports, fenced=True):
-    """Cross-ticker flow comparison chart (unicode, monospace)."""
-    ok = [R for R in reports if R.get("ok")]
-    if len(ok) < 2:
-        return "_(--compare needs at least 2 tickers with options data)_"
-    ok = sorted(ok, key=lambda R: R["call_share"], reverse=True)
-    namew = max(len(R["ticker"]) for R in ok)
-    L = []
-    L.append(f"FLOW COMPARISON — {date.today().isoformat()}  (directional $, deep-ITM arb excluded)")
-    L.append("")
-
-    # 1. call-share bars, most bullish first
-    barw = 30
-    L.append("% OF DIRECTIONAL DOLLARS IN CALLS")
-    for R in ok:
-        share = R["call_share"]
-        fill = max(0, min(barw, round(share * barw)))
-        rtxt = f"{R['ratio']:.1f}×" if 0 < R["ratio"] < 90 else "  ∞"
-        L.append(f"  {R['ticker']:<{namew}} │{'█'*fill}{'░'*(barw-fill)}│ {share*100:3.0f}%  {rtxt:>5}  {R['emoji']} {R['verdict']}")
-    L.append("")
-
-    # 2. absolute $ magnitude, calls vs puts per ticker (shared scale)
-    vmax = max(max(R["cprem"], R["pprem"]) for R in ok)
-    L.append("DIRECTIONAL PREMIUM  (C = calls, P = puts, shared scale)")
-    for R in ok:
-        L.append(f"  {R['ticker']:<{namew}} C │{hbar(R['cprem'], vmax):<24} {money_short(R['cprem'])}")
-        L.append(f"  {' '*namew} P │{hbar(R['pprem'], vmax, char='▒'):<24} {money_short(R['pprem'])}")
-    L.append("")
-
-    # 3. quick-stat table
-    L.append(f"  {'':<{namew}}   P/C count   ATM IV   skew")
-    for R in ok:
-        iv = R.get("iv", {})
-        pcr = f"{R['pcr']:.2f}" if R["pcr"] != float("inf") else "∞"
-        L.append(f"  {R['ticker']:<{namew}}   {pcr:>9}   {iv.get('atm', 0):>5.0f}%   {iv.get('skew', 'n/a')}")
-
+def expiry_flow_table(R, fenced=True):
+    """The core view: exact $ call/put flow per exact expiry date."""
+    rows = R["by_expiry"]
+    if not rows:
+        return "_(no directional flow found)_"
+    barw = 16
+    L = [f"{'DATE':<12}{'DTE':>4}  {'CALL $':>12}  {'PUT $':>12}  {'CALLS ' + '─'*(barw-6) + ' PUTS':<{barw+6}} NET     TOP PRINT"]
+    for r in rows:
+        fill = max(0, min(barw, round(r["share"] * barw)))
+        bar = "█" * fill + "░" * (barw - fill)
+        net = f"{r['ratio']:.1f}×" if 0 < r["ratio"] < 90 else "∞"
+        t = r["top"]
+        top = f"{t['side']} ${t['strike']:g} {money_short(t['prem'])}" if t else "—"
+        L.append(f"{r['expiry']:<12}{r['dte']:>4}  {money(r['cprem']):>12}  {money(r['pprem']):>12}  "
+                 f"{bar} {r['share']*100:>3.0f}%  {net:>5}   {top}")
+    tot_c = sum(r["cprem"] for r in rows)
+    tot_p = sum(r["pprem"] for r in rows)
+    L.append(f"{'TOTAL':<12}{'':>4}  {money(tot_c):>12}  {money(tot_p):>12}")
     body = "\n".join(L)
     return f"```\n{body}\n```" if fenced else body
 
@@ -330,8 +352,9 @@ def render_text(R):
     out = ["=" * 74]
     if not R["ok"]:
         return f"  {R['ticker']}: no options data available."
-    out.append(f" {R['ticker']}   spot ~${R['spot']:,.2f}   expiries: "
-               f"{', '.join(R['expiries']) if R['expiries'] else 'none'}  (0DTE skipped)")
+    e = R["expiries"]
+    out.append(f" {R['ticker']}   spot ~${R['spot']:,.2f}   expiries "
+               f"{f'{e[0]} -> {e[-1]} ({len(e)} dates)' if e else 'none'}  (0DTE skipped)")
     out.append("=" * 74)
     rtxt = f"   (call $/put $ = {R['ratio']:.1f}x)" if 0 < R["ratio"] < 90 else ""
     out.append(f"\n>>> NET DIRECTIONAL FLOW: {R['verdict']}{rtxt}")
@@ -340,17 +363,19 @@ def render_text(R):
     out.append(f"\n[1] CALL/PUT  vol {R['cvol']:,.0f}C / {R['pvol']:,.0f}P  -> P/C {R['pcr']:.2f}")
     if "iv" in R:
         iv = R["iv"]
-        out.append(f"[4] IV  ATM ~{iv['atm']:.0f}% | OTMc ~{iv['otm_call']:.0f}% OTMp ~{iv['otm_put']:.0f}%  -> {iv['skew']}")
-    out.append("\n[2] VOLUME >> OI")
+        out.append(f"[2] IV  ATM ~{iv['atm']:.0f}% | OTMc ~{iv['otm_call']:.0f}% OTMp ~{iv['otm_put']:.0f}%  -> {iv['skew']}")
+    out.append("\n[3] FLOW BY EXPIRY")
+    out.append(expiry_flow_table(R, fenced=False))
+    out.append("\n[4] VOLUME >> OI")
     for r in R["hot"]:
         out.append(f"    {r['expiry']:<11}{r['side']:<3}{r['strike']:>9.1f}  vol {r['volume']:>8,.0f}"
                    f"  vol/OI {r['volOI']:>5.1f}  {money(r['premium'])}")
-    out.append("\n[3] LARGEST $ PRINTS")
+    out.append("\n[5] LARGEST $ PRINTS")
     for r in R["big"]:
         out.append(f"    {r['expiry']:<11}{r['side']:<3}{r['strike']:>9.1f}  {money(r['premium']):>14}"
                    f"  {mny_tag(r['itm'])}")
     oi = R["oi"]
-    out.append(f"\n[5] OI BUILDUP  (snapshot {oi['snapshot']})")
+    out.append(f"\n[6] OI BUILDUP  (snapshot {oi['snapshot']})")
     if oi["prev_date"] is None:
         out.append("    baseline saved - run again later for buildup")
     else:
@@ -362,26 +387,21 @@ def render_text(R):
 def main():
     ap = argparse.ArgumentParser(description="Free-data options-flow / whale-positioning scanner")
     ap.add_argument("tickers", nargs="+")
-    ap.add_argument("--expiries", type=int, default=3)
+    ap.add_argument("--expiries", type=int, default=14,
+                    help="max expiry dates to pull (weeklies ≤45 DTE + monthlies out ~18mo)")
     ap.add_argument("--min-premium", type=float, default=250_000)
     ap.add_argument("--min-voloi", type=float, default=2.0)
     ap.add_argument("--min-vol", type=int, default=300)
     ap.add_argument("--format", choices=["md", "text"], default="md",
                     help="md = chat Markdown UI (default), text = plain console")
-    ap.add_argument("--compare", action="store_true",
-                    help="append a cross-ticker flow-comparison chart (needs 2+ tickers)")
-    ap.add_argument("--compare-only", action="store_true",
-                    help="print ONLY the comparison chart, skip per-ticker reports")
     args = ap.parse_args()
     # Windows consoles default to cp1252 and choke on emoji/box chars — force UTF-8
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     render = render_md if args.format == "md" else render_text
-    reports = [build_report(t.upper(), args.expiries, args.min_premium, args.min_voloi, args.min_vol)
-               for t in args.tickers]
-    blocks = [] if args.compare_only else [render(R) for R in reports]
-    if args.compare or args.compare_only:
-        blocks.append(render_compare(reports, fenced=(args.format == "md")))
+    blocks = [render(build_report(t.upper(), args.expiries, args.min_premium,
+                                  args.min_voloi, args.min_vol))
+              for t in args.tickers]
     sep = "\n\n---\n\n" if args.format == "md" else "\n\n"
     print(sep.join(blocks))
 
