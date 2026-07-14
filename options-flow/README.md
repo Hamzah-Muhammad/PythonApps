@@ -30,6 +30,10 @@ python flow.py MU NVDA SNDK --expiries 4 --min-premium 250000
 
 # plain console output instead of Markdown
 python flow.py AAPL --format text
+
+# cross-ticker comparison chart (call-share bars, premium magnitude, quick stats)
+python flow.py ARM MRVL --compare        # appended after the per-ticker reports
+python flow.py ARM MRVL --compare-only   # just the chart — fastest side-by-side read
 ```
 
 ### Options
@@ -42,6 +46,8 @@ python flow.py AAPL --format text
 | `--min-voloi` | `2.0` | Minimum Volume/Open-Interest ratio for "Fresh Positioning". |
 | `--min-vol` | `300` | Minimum contract volume for "Fresh Positioning". |
 | `--format` | `md` | `md` for Markdown, `text` for console. |
+| `--compare` | off | Append a cross-ticker flow-comparison chart (needs 2+ tickers). |
+| `--compare-only` | off | Print only the comparison chart, skip full per-ticker reports. |
 
 ## How to read it
 

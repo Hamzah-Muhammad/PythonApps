@@ -19,9 +19,12 @@ Noise filters applied:
 Usage:
     python flow.py MU
     python flow.py MU NVDA SNDK --expiries 4 --min-premium 250000
+    python flow.py ARM MRVL --compare          # adds cross-ticker comparison chart
+    python flow.py ARM MRVL --compare-only     # comparison chart only, skip full reports
 """
 import argparse
 import os
+import sys
 from datetime import date
 
 import pandas as pd
@@ -271,6 +274,57 @@ def render_md(R):
     return "\n".join(L)
 
 
+def money_short(x):
+    return f"${x/1e6:.2f}M" if x >= 1e6 else f"${x/1e3:.0f}K"
+
+
+def hbar(value, vmax, width=24, char="█"):
+    """Horizontal bar scaled to vmax."""
+    if vmax <= 0:
+        return ""
+    return char * max(1, round(value / vmax * width)) if value > 0 else ""
+
+
+def render_compare(reports, fenced=True):
+    """Cross-ticker flow comparison chart (unicode, monospace)."""
+    ok = [R for R in reports if R.get("ok")]
+    if len(ok) < 2:
+        return "_(--compare needs at least 2 tickers with options data)_"
+    ok = sorted(ok, key=lambda R: R["call_share"], reverse=True)
+    namew = max(len(R["ticker"]) for R in ok)
+    L = []
+    L.append(f"FLOW COMPARISON — {date.today().isoformat()}  (directional $, deep-ITM arb excluded)")
+    L.append("")
+
+    # 1. call-share bars, most bullish first
+    barw = 30
+    L.append("% OF DIRECTIONAL DOLLARS IN CALLS")
+    for R in ok:
+        share = R["call_share"]
+        fill = max(0, min(barw, round(share * barw)))
+        rtxt = f"{R['ratio']:.1f}×" if 0 < R["ratio"] < 90 else "  ∞"
+        L.append(f"  {R['ticker']:<{namew}} │{'█'*fill}{'░'*(barw-fill)}│ {share*100:3.0f}%  {rtxt:>5}  {R['emoji']} {R['verdict']}")
+    L.append("")
+
+    # 2. absolute $ magnitude, calls vs puts per ticker (shared scale)
+    vmax = max(max(R["cprem"], R["pprem"]) for R in ok)
+    L.append("DIRECTIONAL PREMIUM  (C = calls, P = puts, shared scale)")
+    for R in ok:
+        L.append(f"  {R['ticker']:<{namew}} C │{hbar(R['cprem'], vmax):<24} {money_short(R['cprem'])}")
+        L.append(f"  {' '*namew} P │{hbar(R['pprem'], vmax, char='▒'):<24} {money_short(R['pprem'])}")
+    L.append("")
+
+    # 3. quick-stat table
+    L.append(f"  {'':<{namew}}   P/C count   ATM IV   skew")
+    for R in ok:
+        iv = R.get("iv", {})
+        pcr = f"{R['pcr']:.2f}" if R["pcr"] != float("inf") else "∞"
+        L.append(f"  {R['ticker']:<{namew}}   {pcr:>9}   {iv.get('atm', 0):>5.0f}%   {iv.get('skew', 'n/a')}")
+
+    body = "\n".join(L)
+    return f"```\n{body}\n```" if fenced else body
+
+
 def render_text(R):
     """Plain aligned console output."""
     out = ["=" * 74]
@@ -314,12 +368,20 @@ def main():
     ap.add_argument("--min-vol", type=int, default=300)
     ap.add_argument("--format", choices=["md", "text"], default="md",
                     help="md = chat Markdown UI (default), text = plain console")
+    ap.add_argument("--compare", action="store_true",
+                    help="append a cross-ticker flow-comparison chart (needs 2+ tickers)")
+    ap.add_argument("--compare-only", action="store_true",
+                    help="print ONLY the comparison chart, skip per-ticker reports")
     args = ap.parse_args()
+    # Windows consoles default to cp1252 and choke on emoji/box chars — force UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     render = render_md if args.format == "md" else render_text
-    blocks = []
-    for t in args.tickers:
-        R = build_report(t.upper(), args.expiries, args.min_premium, args.min_voloi, args.min_vol)
-        blocks.append(render(R))
+    reports = [build_report(t.upper(), args.expiries, args.min_premium, args.min_voloi, args.min_vol)
+               for t in args.tickers]
+    blocks = [] if args.compare_only else [render(R) for R in reports]
+    if args.compare or args.compare_only:
+        blocks.append(render_compare(reports, fenced=(args.format == "md")))
     sep = "\n\n---\n\n" if args.format == "md" else "\n\n"
     print(sep.join(blocks))
 
