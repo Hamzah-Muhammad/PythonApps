@@ -1,14 +1,16 @@
 # Nocturne
 
 An 88-key concert grand piano for Windows. Play it with your computer keyboard or the mouse.
+The keyboard uses the standard "Musical Typing" layout from Ableton Live, GarageBand and Logic.
 Real recorded piano samples, sustain pedal, chord names, and a black-lacquer-and-gold look.
 
 ## Controls
 
 | Key | Does |
 |---|---|
-| `A S D F G H J K L` | White keys, C up to the D an octave above (black keys: use the mouse) |
-| `←` `→` | Move the keyboard reach down / up an octave |
+| `A S D F G H J K L ; '` | White keys, C up to the F an octave higher |
+| `W E` `T Y U` `O P` | Black keys (the row above, sitting where they do on a piano) |
+| `Z` `X` or `←` `→` | Move the keyboard reach down / up an octave |
 | `↑` `↓` | Volume |
 | `Space` (hold) | Sustain pedal |
 | `Shift` + note | Accent (play louder) |

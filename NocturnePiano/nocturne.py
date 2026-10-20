@@ -35,11 +35,11 @@ SAMPLE_PCS = {"C": 0, "Ds": 3, "Fs": 6, "A": 9}  # sample file names, e.g. Ds4.m
 # Real pianos set black keys off-centre: C♯/F♯ lean left, D♯/A♯ lean right.
 BLACK_OFFSET = {1: -0.12, 3: 0.12, 6: -0.15, 8: 0.0, 10: 0.15}
 
-# Home row only: A..L play the white keys from C up to the D an octave above.
-HOME_ROW = "asdfghjkl"
-WHITE_STEPS = [0, 2, 4, 5, 7, 9, 11, 12, 14]
-KEYMAP = {ord(c): step for c, step in zip(HOME_ROW, WHITE_STEPS)}
-REACH = WHITE_STEPS[-1]
+# Musical Typing layout (Ableton Live, GarageBand, Logic): white keys on the home row,
+# black keys on the row above, C up to the F an octave higher. Z / X shift the octave.
+TYPING_KEYS = "awsedftgyhujkolp;'"
+KEYMAP = {ord(c): step for step, c in enumerate(TYPING_KEYS)}
+REACH = len(TYPING_KEYS) - 1
 
 CHORDS = {
     (0, 4, 7): "major", (0, 3, 7): "minor", (0, 3, 6): "diminished", (0, 4, 8): "augmented",
@@ -191,6 +191,8 @@ class App:
         self.serif_path = pygame.font.match_font("palatinolinotype,georgia,timesnewroman")
         self.serif_italic_path = pygame.font.match_font("palatinolinotype,georgia,timesnewroman", italic=True)
         self.sans_path = pygame.font.match_font("segoeui,arial")
+        self.symbol_path = pygame.font.match_font("segoeuisymbol,segoeui,arial")
+        self.sharp_fonts = {}  # serif font -> same-size symbol font for the ♯ sign
         self.f_title = self.font(self.serif_path, 42)
         self.f_notes = self.font(self.serif_path, 28)
         self.f_chord = self.font(self.serif_italic_path, 17)
@@ -198,8 +200,6 @@ class App:
         self.f_caps = self.font(self.serif_path, 10)
         self.f_label = self.font(self.sans_path, 10)
         self.f_hint = self.font(self.sans_path, 12)
-        if None in self.f_notes.metrics("♯"):
-            NOTE_NAMES[:] = [n.replace("♯", "#") for n in NOTE_NAMES]
 
         self.background = self.make_background()
         self.build_keys()
@@ -213,7 +213,10 @@ class App:
         self.show_labels = True
 
     def font(self, path, size):
-        return pygame.font.Font(path, max(8, round(size * self.s)))
+        px = max(8, round(size * self.s))
+        font = pygame.font.Font(path, px)
+        self.sharp_fonts[font] = pygame.font.Font(self.symbol_path, round(px * 0.8))
+        return font
 
     # ---------- static artwork ----------
 
@@ -260,7 +263,7 @@ class App:
             front = round((5 if down else 12) * self.s)
             inset = max(2, round(2.5 * self.s))
             surf = vertical_gradient((w, h), (34, 32, 38), (8, 8, 10))
-            face_top, face_bottom = ((40, 37, 34), (18, 17, 18)) if down else ((66, 63, 70), (22, 21, 25))
+            face_top, face_bottom = ((96, 80, 48), (36, 30, 22)) if down else ((66, 63, 70), (22, 21, 25))
             face = vertical_gradient((w - 2 * inset, h - front), face_top, face_bottom)
             surf.blit(face, (inset, 0))
             if down:
@@ -279,6 +282,20 @@ class App:
         for g in glyphs:
             surf.blit(g, (x, 0))
             x += g.get_width() + spacing
+        return surf
+
+    def music(self, font, text, color):
+        """Render text with note names; the serif faces have no ♯, so it comes from the symbol font."""
+        runs = [(self.sharp_fonts[font] if part == "♯" else font, part)
+                for part in text.replace("♯", "|♯|").split("|") if part]
+        glyphs = [(f.render(part, True, color), f.get_ascent()) for f, part in runs]
+        ascent = max(a for _, a in glyphs)
+        surf = pygame.Surface((sum(g.get_width() for g, _ in glyphs), max(ascent - a + g.get_height() for g, a in glyphs)),
+                              pygame.SRCALPHA)
+        x = 0
+        for g, a in glyphs:
+            surf.blit(g, (x, ascent - a))  # line the runs up on a shared baseline
+            x += g.get_width()
         return surf
 
     def blit_center(self, surf, cx, y):
@@ -360,10 +377,10 @@ class App:
         cx = self.width / 2
         if notes:
             text = "   ".join(note_name(n) for n in notes[:8]) + ("  …" if len(notes) > 8 else "")
-            self.blit_center(self.f_notes.render(text, True, IVORY_TEXT), cx, 26 * s)
+            self.blit_center(self.music(self.f_notes, text, IVORY_TEXT), cx, 26 * s)
             chord = describe(notes)
             if chord:
-                self.blit_center(self.f_chord.render(chord, True, GOLD), cx, 66 * s)
+                self.blit_center(self.music(self.f_chord, chord, GOLD), cx, 66 * s)
         else:
             self.blit_center(self.f_notes.render("—", True, FAINT), cx, 26 * s)
 
@@ -376,7 +393,7 @@ class App:
         y_cap, y_val = 30 * s, 52 * s
 
         self.blit_center(caps("REACH"), x + col_w / 2, y_cap)
-        self.blit_center(self.f_value.render(f"{note_name(lo)} – {note_name(hi)}", True, IVORY_TEXT), x + col_w / 2, y_val)
+        self.blit_center(self.music(self.f_value, f"{note_name(lo)} – {note_name(hi)}", IVORY_TEXT), x + col_w / 2, y_val)
 
         x += col_w
         self.blit_center(caps("VOLUME"), x + col_w / 2, y_cap)
@@ -405,8 +422,8 @@ class App:
         pygame.draw.line(scr, GOLD_DIM, (m, y_rule), (self.width - m, y_rule), 1)
 
     def draw_footer(self, top):
-        parts = [("A – L", True), ("  play      ", False),
-                 ("← →", True), ("  octave      ", False), ("↑ ↓", True), ("  volume      ", False),
+        parts = [("A – '", True), ("  white      ", False), ("W E T Y U O P", True), ("  black      ", False),
+                 ("Z X", True), ("  octave      ", False), ("↑ ↓", True), ("  volume      ", False),
                  ("Space", True), ("  sustain      ", False), ("Shift", True), ("  accent      ", False),
                  ("Tab", True), ("  letters", False)]
         glyphs = [self.f_hint.render(t, True, IVORY_TEXT if k else FAINT) for t, k in parts]
@@ -473,9 +490,9 @@ class App:
                 self.press(midi, ACCENT_VELOCITY if e.mod & pygame.KMOD_SHIFT else KEY_VELOCITY)
             elif e.key == pygame.K_SPACE:
                 self.piano.set_pedal(True)
-            elif e.key == pygame.K_LEFT:
+            elif e.key in (pygame.K_LEFT, pygame.K_z):
                 self.octave = max(0, self.octave - 1)
-            elif e.key == pygame.K_RIGHT:
+            elif e.key in (pygame.K_RIGHT, pygame.K_x):
                 self.octave = min(6, self.octave + 1)
             elif e.key == pygame.K_UP:
                 self.piano.volume = min(1.0, round(self.piano.volume + 0.1, 1))
