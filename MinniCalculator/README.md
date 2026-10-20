@@ -1,4 +1,4 @@
-# Meridian
+# Minni Calculator
 
 A calculator for Windows built for long-form math. What you type shows like a textbook:
 fractions stack numerator over denominator, powers sit raised, square roots get a real radical sign.
@@ -38,11 +38,11 @@ for editing. Scroll the screen to see older history.
 
 ## Run it
 
-Double-click `dist\Meridian.exe` (or the Desktop shortcut). From source:
+Double-click `dist\MinniCalculator.exe` (or the Desktop shortcut). From source:
 
 ```
 pip install pygame
-python meridian.py
+python minni_calculator.py
 ```
 
 ## Build the exe
@@ -50,7 +50,7 @@ python meridian.py
 ```
 pip install pyinstaller pillow
 python make_icon.py
-pyinstaller --noconfirm --onefile --windowed --name Meridian --icon icon.ico --add-data "icon.png;." meridian.py
+pyinstaller --noconfirm --onefile --windowed --name MinniCalculator --icon icon.ico --add-data "icon.png;." minni_calculator.py
 ```
 
 The exe lands in `dist\`. PyInstaller binaries sometimes trigger antivirus false positives;

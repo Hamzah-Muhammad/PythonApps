@@ -1,4 +1,4 @@
-"""Meridian: a calculator for long-form math with textbook display.
+"""Minni Calculator: a calculator for long-form math with textbook display.
 
 Fractions stack (numerator over denominator), powers sit raised, roots get a real radical.
 Arithmetic is exact (fractions.Fraction) until a root or a fractional power forces a float.
@@ -315,7 +315,7 @@ class App:
     def __init__(self):
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Hamzah.Meridian.Calculator")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Hamzah.Minni.Calculator")
         except (AttributeError, OSError):
             pass
         os.environ["SDL_VIDEO_CENTERED"] = "1"
@@ -328,7 +328,7 @@ class App:
         s = self.s
         self.width, self.height = round(base_w * s), round(base_h * s)
         self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("Meridian — Calculator")
+        pygame.display.set_caption("Minni Calculator")
         if os.path.exists(ICON_PATH):
             pygame.display.set_icon(pygame.image.load(ICON_PATH))
         pygame.key.set_repeat(380, 45)
@@ -838,8 +838,8 @@ class App:
     def draw(self):
         s, scr = self.s, self.screen
         scr.blit(self.background, (0, 0))
-        title = self.f_title.render("Meridian", True, GOLD)
-        scr.blit(self.f_title.render("Meridian", True, (0, 0, 0)), (self.margin + 2, round(14 * s) + 2))
+        title = self.f_title.render("Minni", True, GOLD)
+        scr.blit(self.f_title.render("Minni", True, (0, 0, 0)), (self.margin + 2, round(14 * s) + 2))
         scr.blit(title, (self.margin, round(14 * s)))
         caps = "  ".join("CALCULATOR")
         g = self.f_caps.render(caps, True, GOLD_MUTED)

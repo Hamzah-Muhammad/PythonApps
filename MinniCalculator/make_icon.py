@@ -1,4 +1,4 @@
-"""Render Meridian's calculator icon (icon.png + multi-size icon.ico) with Pillow."""
+"""Render Minni Calculator's icon (icon.png + multi-size icon.ico) with Pillow."""
 import pathlib
 
 from PIL import Image, ImageDraw
