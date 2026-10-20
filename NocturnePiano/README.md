@@ -7,8 +7,7 @@ Real recorded piano samples, sustain pedal, chord names, and a black-lacquer-and
 
 | Key | Does |
 |---|---|
-| `Z S X D C V G B H N J M , L . ; /` | Lower octave (white and black keys, like a piano) |
-| `Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P [ = ]` | The octave above |
+| `A S D F G H J K L` | White keys, C up to the D an octave above (black keys: use the mouse) |
 | `←` `→` | Move the keyboard reach down / up an octave |
 | `↑` `↓` | Volume |
 | `Space` (hold) | Sustain pedal |

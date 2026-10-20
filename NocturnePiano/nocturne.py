@@ -35,11 +35,11 @@ SAMPLE_PCS = {"C": 0, "Ds": 3, "Fs": 6, "A": 9}  # sample file names, e.g. Ds4.m
 # Real pianos set black keys off-centre: C♯/F♯ lean left, D♯/A♯ lean right.
 BLACK_OFFSET = {1: -0.12, 3: 0.12, 6: -0.15, 8: 0.0, 10: 0.15}
 
-# Tracker layout: bottom row = lower octave, top row = the octave above.
-LOWER_ROW = "z s x d c v g b h n j m , l . ; /".split()
-UPPER_ROW = "q 2 w 3 e r 5 t 6 y 7 u i 9 o 0 p [ = ]".split()
-KEYMAP = {ord(c): i for i, c in enumerate(LOWER_ROW)}
-KEYMAP.update({ord(c): 12 + i for i, c in enumerate(UPPER_ROW)})
+# Home row only: A..L play the white keys from C up to the D an octave above.
+HOME_ROW = "asdfghjkl"
+WHITE_STEPS = [0, 2, 4, 5, 7, 9, 11, 12, 14]
+KEYMAP = {ord(c): step for c, step in zip(HOME_ROW, WHITE_STEPS)}
+REACH = WHITE_STEPS[-1]
 
 CHORDS = {
     (0, 4, 7): "major", (0, 3, 7): "minor", (0, 3, 6): "diminished", (0, 4, 8): "augmented",
@@ -336,7 +336,7 @@ class App:
 
         # gold marker over the keys the computer keyboard currently reaches
         base = 12 * (self.octave + 1)
-        reach = [k for k in self.keys if base <= k.midi <= base + 31]
+        reach = [k for k in self.keys if base <= k.midi <= base + REACH]
         if reach:
             x0, x1 = reach[0].rect.left, reach[-1].rect.right
             pygame.draw.rect(scr, GOLD, (x0, self.keys_top - max(2, round(2 * s)), x1 - x0, max(2, round(2 * s))))
@@ -372,7 +372,7 @@ class App:
         x = self.width - m - 3 * col_w
         caps = lambda t: self.spaced(self.f_caps, t, GOLD_MUTED, round(3 * s))
         base = 12 * (self.octave + 1)
-        lo, hi = max(LOW, base), min(HIGH, base + 31)
+        lo, hi = max(LOW, base), min(HIGH, base + REACH)
         y_cap, y_val = 30 * s, 52 * s
 
         self.blit_center(caps("REACH"), x + col_w / 2, y_cap)
@@ -405,7 +405,7 @@ class App:
         pygame.draw.line(scr, GOLD_DIM, (m, y_rule), (self.width - m, y_rule), 1)
 
     def draw_footer(self, top):
-        parts = [("Z – /", True), ("  &  ", False), ("Q – ]", True), ("  play      ", False),
+        parts = [("A – L", True), ("  play      ", False),
                  ("← →", True), ("  octave      ", False), ("↑ ↓", True), ("  volume      ", False),
                  ("Space", True), ("  sustain      ", False), ("Shift", True), ("  accent      ", False),
                  ("Tab", True), ("  letters", False)]
