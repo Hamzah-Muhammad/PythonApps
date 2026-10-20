@@ -6,6 +6,7 @@ A collection of standalone Python tools ("mini apps") — each solves one specif
 
 | Project | What it does |
 |--------|--------------|
+| [NocturnePiano](./NocturnePiano) | An 88-key concert grand piano you play from the computer keyboard or mouse: real Salamander Grand samples, sustain pedal, chord names, one-file exe. |
 | [options-flow](./options-flow) | Free-data options-flow / "whale positioning" scanner — reads call/put dollar flow, fresh volume-vs-open-interest positioning, IV skew, and multi-day OI buildup for any ticker. |
 
 _More tools will be added over time._
