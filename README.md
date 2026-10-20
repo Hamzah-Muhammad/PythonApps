@@ -6,6 +6,7 @@ A collection of standalone Python tools ("mini apps") — each solves one specif
 
 | Project | What it does |
 |--------|--------------|
+| [MeridianCalc](./MeridianCalc) | A long-form math calculator with textbook display: stacked fractions, powers and roots, exact answers, a cursor dial, live results and history. |
 | [options-flow](./options-flow) | Free-data options-flow / "whale positioning" scanner — reads call/put dollar flow, fresh volume-vs-open-interest positioning, IV skew, and multi-day OI buildup for any ticker. |
 
 _More tools will be added over time._
