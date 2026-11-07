@@ -1,0 +1,27 @@
+# Queries for AIVisibilityCheck.
+# "brand" queries run in classic search only.
+# "intent" queries run in classic search AND in the AI assistants.
+domain: minniai.com
+product_terms:
+  - minniai.com
+  - minnimemory
+  - minnicode
+  - minnituner
+  - minni ai
+competitors:
+  - mem0.ai
+  - github.com
+  - npmjs.com
+  - reddit.com
+  - medium.com
+brand:
+  - MinniMemoryMCP
+  - minnimemory npm
+  - Minni AI
+intent:
+  - reduce claude code token usage
+  - claude code memory across sessions
+  - claude code memory directory
+  - free nvidia api key coding agent
+  - mem0 alternative claude code
+  - best mcp memory server
