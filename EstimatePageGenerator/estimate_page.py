@@ -249,7 +249,7 @@ def render(job: dict) -> str:
 * {{ box-sizing:border-box; margin:0; padding:0 }}
 body {{ background:var(--bg); color:var(--ink); font:15px/1.55 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }}
 .wrap {{ max-width:440px; margin:0 auto; background:#f4f6fa; min-height:100vh; padding-bottom:110px; box-shadow:0 0 40px rgba(9,36,84,.08); }}
-header.brand {{ display:flex; align-items:center; justify-content:center; gap:10px; padding:12px 16px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }}
+header.brand {{ display:flex; align-items:center; justify-content:center; gap:10px; padding:calc(12px + env(safe-area-inset-top)) 16px 12px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }}
 header.brand img {{ height:40px; }}
 header.brand span {{ font:700 15px Poppins,sans-serif; color:var(--navy); letter-spacing:.2px; }}
 main {{ padding:12px; display:flex; flex-direction:column; gap:12px; }}
@@ -301,7 +301,7 @@ h2 {{ font:700 18px Poppins,sans-serif; color:var(--navy); margin:2px 0 6px; }}
   * {{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }}
   html, body {{ background:#f4f6fa; }}
   .wrap {{ max-width:none; width:440px; min-height:0; padding-bottom:16px; box-shadow:none; }}
-  header.brand {{ position:static; }}
+  header.brand {{ position:static; padding-top:44px; }}  /* clears the iPhone notch / Dynamic Island */
   .cta {{ position:static; background:none; padding:4px 12px 0; }}
   .cta a {{ box-shadow:none; }}
   .card, .cta a {{ break-inside:avoid; }}
