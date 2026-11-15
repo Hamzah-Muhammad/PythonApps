@@ -18,10 +18,13 @@ Several PDFs at once:
 py -3 estimate_page.py a.pdf b.pdf c.pdf
 ```
 
-Output goes to `C:\Users\hamza\Desktop\Claude Files\Estimate Pages\` by default (change with `--out DIR`). Each PDF gives two files:
+Output goes to `C:\Users\hamza\Desktop\Claude Files\Estimate Pages\` by default (change with `--out DIR`). Each PDF gives three files:
 
+- `<name>_page.pdf`: the page as a PDF, ready to text or email. One long phone-width page that looks the same as the web version; the phone, email and Book buttons stay tappable.
 - `<name>.html`: the page. Self-contained (logo embedded); fonts load from Google Fonts with a system-font fallback offline.
 - `<name>.json`: what the script read from the PDF.
+
+The PDF is printed by Google Chrome (or Microsoft Edge) running hidden in the background with its own throwaway profile, so your open browser is not touched. Skip it with `--no-pdf`.
 
 ## When the parse is wrong
 
@@ -41,6 +44,6 @@ Built for the Prolific Insulation estimate layout: company block, `ESTIMATE` tit
 
 ## Side effects
 
-Reads the PDF, writes two files to the output folder. No network calls, nothing installed, nothing else touched.
+Reads the PDF and writes three files to the output folder. The only network use is the PDF step fetching the Google Fonts (Inter, Poppins); offline it falls back to system fonts. Nothing is installed and nothing else is touched.
 
 Disclaimer: provided as-is. Always check the page against the original PDF before sending it to a client.

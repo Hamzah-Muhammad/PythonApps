@@ -15,7 +15,9 @@ import base64
 import html
 import json
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
@@ -293,7 +295,17 @@ h2 {{ font:700 18px Poppins,sans-serif; color:var(--navy); margin:2px 0 6px; }}
 .fine {{ text-align:center; color:#8a94aa; font-size:12px; padding:4px 12px 0; }}
 .cta {{ position:fixed; left:0; right:0; bottom:0; padding:12px 12px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(244,246,250,1) 60%, rgba(244,246,250,0)); }}
 .cta a {{ display:block; max-width:416px; margin:0 auto; text-align:center; background:var(--navy); color:#fff; text-decoration:none; font:700 15px Poppins,sans-serif; padding:15px; border-radius:14px; box-shadow:0 8px 20px rgba(9,36,84,.3); }}
-@media print {{ .cta, header.brand {{ display:none }} body,.wrap {{ background:#fff; box-shadow:none }} }}
+/* Print = the PDF export: one long phone-width page that looks like the screen version. */
+@page {{ size:440px 14000px; margin:0; }}
+@media print {{
+  * {{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }}
+  html, body {{ background:#f4f6fa; }}
+  .wrap {{ max-width:none; width:440px; min-height:0; padding-bottom:16px; box-shadow:none; }}
+  header.brand {{ position:static; }}
+  .cta {{ position:static; background:none; padding:4px 12px 0; }}
+  .cta a {{ box-shadow:none; }}
+  .card, .cta a {{ break-inside:avoid; }}
+}}
 </style>
 </head>
 <body>
@@ -349,8 +361,43 @@ h2 {{ font:700 18px Poppins,sans-serif; color:var(--navy); margin:2px 0 6px; }}
 """
 
 
+# ---------------------------------------------------------------- pdf export
+CHROME_PATHS = [
+    Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+    Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+    Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+    Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+]
+
+
+def html_to_pdf(html_file: Path, pdf_file: Path) -> None:
+    """Print the page with headless Chrome/Edge, then cut the tall page to the content's height."""
+    browser = next((p for p in CHROME_PATHS if p.exists()), None)
+    if browser is None:
+        raise RuntimeError("Chrome or Edge not found; install one or use --no-pdf")
+    raw = pdf_file.with_suffix(".raw.pdf")
+    with tempfile.TemporaryDirectory() as profile:  # own profile: never touches the user's open Chrome
+        subprocess.run([
+            str(browser), "--headless=new", "--disable-gpu", "--no-first-run", "--no-pdf-header-footer",
+            f"--user-data-dir={profile}", "--virtual-time-budget=8000",
+            f"--print-to-pdf={raw}", html_file.resolve().as_uri(),
+        ], check=True, capture_output=True, timeout=120)
+    doc = fitz.open(raw)
+    if len(doc) != 1:
+        raise RuntimeError(f"expected 1 printed page, got {len(doc)}; the page is taller than the @page size")
+    page = doc[0]
+    full = page.rect
+    bottoms = [b[3] for b in page.get_text("blocks")]
+    bottoms += [d["rect"].y1 for d in page.get_drawings() if d["rect"].height < full.height * 0.9]
+    bottom = min(full.height, max(bottoms) + 12)
+    page.set_mediabox(fitz.Rect(0, full.height - bottom, full.width, full.height))  # PDF y-axis runs bottom-up
+    doc.save(pdf_file, garbage=3, deflate=True)
+    doc.close()
+    raw.unlink()
+
+
 # ---------------------------------------------------------------- cli
-def build(job: dict, out: Path, stem: str, json_only: bool) -> int:
+def build(job: dict, out: Path, stem: str, json_only: bool, pdf: bool = True) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{stem}.json").write_text(json.dumps(job, indent=2), encoding="utf-8")
     errs = check_math(job)
@@ -358,8 +405,13 @@ def build(job: dict, out: Path, stem: str, json_only: bool) -> int:
         print(f"FAIL {stem}: " + "; ".join(errs) + f"\n  fix {out / (stem + '.json')} and rerun with --from-json")
         return 1
     if not json_only:
-        (out / f"{stem}.html").write_text(render(job), encoding="utf-8")
-        print(f"OK   {out / (stem + '.html')}  ({len(job['items'])} items, numbers add up)")
+        page = out / f"{stem}.html"
+        page.write_text(render(job), encoding="utf-8")
+        print(f"OK   {page}  ({len(job['items'])} items, numbers add up)")
+        if pdf:
+            target = out / f"{stem}_page.pdf"
+            html_to_pdf(page, target)
+            print(f"OK   {target}")
     return 0
 
 
@@ -369,17 +421,18 @@ def main() -> int:
     ap.add_argument("--from-json", type=Path)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--json-only", action="store_true", help="parse and check, don't write HTML")
+    ap.add_argument("--no-pdf", action="store_true", help="write the HTML page only, skip the PDF copy")
     a = ap.parse_args()
     if a.from_json:
         job = json.loads(a.from_json.read_text(encoding="utf-8"))
-        return build(job, a.out, a.from_json.stem, a.json_only)
+        return build(job, a.out, a.from_json.stem, a.json_only, not a.no_pdf)
     if not a.pdfs:
         ap.print_help()
         return 2
     rc = 0
     for pdf in a.pdfs:
         try:
-            rc |= build(parse_pdf(pdf), a.out, pdf.stem, a.json_only)
+            rc |= build(parse_pdf(pdf), a.out, pdf.stem, a.json_only, not a.no_pdf)
         except Exception as ex:  # keep going on a batch
             print(f"FAIL {pdf.name}: {ex}")
             rc = 1
