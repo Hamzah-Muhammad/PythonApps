@@ -17,10 +17,12 @@ import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 import fitz  # PyMuPDF
 
 DEFAULT_OUT = Path(r"C:\Users\hamza\Desktop\Claude Files\Estimate Pages")
+LOGO_URI = re.compile(r"data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+")
 MONEY = re.compile(r"^\$[\d,]+\.\d{2}$")
 PRICE_WORDS = {"included", "n/c", "no charge", "free", "tbd"}
 
@@ -192,7 +194,7 @@ def render(job: dict) -> str:
     valid = meta.get("Valid Until", "")
     addr = cl["address"][0] if cl["address"] else cl["name"]
     subject = f"Booking {job['doc_type'].lower()} {est_no} - {addr}"
-    mail = f"mailto:{c['email']}?subject={html.escape(subject).replace(' ', '%20')}" if c["email"] else ""
+    mail = f"mailto:{quote(c['email'], safe='@.+-_')}?subject={quote(subject)}" if c["email"] else ""
     tel = f"tel:{digits(c['phone'])}" if c["phone"] else ""
     book_href = mail or tel or "#"
 
@@ -222,7 +224,8 @@ def render(job: dict) -> str:
       <p>{e(n['body'])}</p>
     </article>""" for n in job["notices"])
 
-    logo = f'<img src="{job["logo"]}" alt="{e(c["name"])} logo">' if job["logo"] else ""
+    logo_ok = bool(LOGO_URI.fullmatch(job.get("logo") or ""))
+    logo = f'<img src="{e(job["logo"])}" alt="{e(c["name"])} logo">' if logo_ok else ""
     company_addr = "<br>".join(e(a) for a in c["address"])
     n_items = len(job["items"])
     areas = list(dict.fromkeys(area_of(it["title"]) for it in job["items"]))
@@ -333,13 +336,13 @@ h2 {{ font:700 18px Poppins,sans-serif; color:var(--navy); margin:2px 0 6px; }}
       <div class="name">{e(c['name'])}</div>
       <div class="addr">{company_addr}</div>
       <div class="contact">
-        {f'<a href="{tel}">📞 {e(c["phone"])}</a>' if tel else ''}
-        {f'<a href="mailto:{e(c["email"])}">✉ {e(c["email"])}</a>' if c['email'] else ''}
+        {f'<a href="{e(tel)}">📞 {e(c["phone"])}</a>' if tel else ''}
+        {f'<a href="{e(mail)}">✉ {e(c["email"])}</a>' if c['email'] else ''}
       </div>
     </section>
     <p class="fine">{e(job['doc_type'])} {e(est_no)}{(' · valid until ' + e(valid)) if valid else ''}</p>
   </main>
-  <div class="cta"><a href="{book_href}">Book your job now · {e(total['amount'])} →</a></div>
+  <div class="cta"><a href="{e(book_href)}">Book your job now · {e(total['amount'])} →</a></div>
 </div>
 </body>
 </html>
